@@ -13,6 +13,86 @@ export function DynamicQueryInterface() {
   const [analysisResult, setAnalysisResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState("")
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      setError("Please select a file")
+      return
+    }
+
+    // Check file type
+    const fileType = file.type
+    const validTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'text/plain'
+    ]
+
+    if (!validTypes.includes(fileType)) {
+      setError("Invalid file type. Please upload PDF, DOCX, JPG, PNG, WEBP, or TXT files.")
+      return
+    }
+
+    setIsAnalyzing(true)
+    setError(null)
+
+    const formData = new FormData()
+    formData.append('file', file)
+
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+      const response = await fetch(`${apiUrl}/api/upload`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`)
+      }
+
+      const result = await response.json()
+      setAnalysisResult(result)
+    } catch (error) {
+      console.error('Upload error:', error)
+      setError(error instanceof Error ? error.message : 'File upload failed')
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length > 0) {
+      const file = files[0]
+      
+      // Create a synthetic change event
+      const event = {
+        target: {
+          files: [file]
+        }
+      } as unknown as React.ChangeEvent<HTMLInputElement>
+      
+      await handleFileUpload(event)
+    }
+  }
 
   const handleAnalysis = async () => {
     if (!query.trim()) {
@@ -160,10 +240,28 @@ export function DynamicQueryInterface() {
                     </TabsList>
 
                     <TabsContent value="upload" className="space-y-6">
-                      <div className="border-2 border-dashed border-primary/30 rounded-2xl p-12 text-center hover:border-primary/50 transition-colors bg-gradient-to-br from-primary/5 to-secondary/5">
-                        <Upload className="h-16 w-16 text-primary mx-auto mb-4" />
-                        <p className="text-foreground font-medium mb-2 text-lg">Drop files here or click to upload</p>
-                        <p className="text-muted-foreground">Supports PDF, DOCX, TXT, JPG, PNG</p>
+                      <div 
+                        className={`border-2 border-dashed ${
+                          isDragging ? 'border-primary' : 'border-primary/30'
+                        } rounded-2xl p-12 text-center hover:border-primary/50 transition-colors bg-gradient-to-br from-primary/5 to-secondary/5`}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                      >
+                        <input
+                          type="file"
+                          onChange={handleFileUpload}
+                          accept=".pdf,.docx,.txt,.jpg,.jpeg,.png,.webp"
+                          className="hidden"
+                          id="file-upload"
+                        />
+                        <label htmlFor="file-upload" className="cursor-pointer">
+                          <Upload className="h-16 w-16 text-primary mx-auto mb-4" />
+                          <p className="text-foreground font-medium mb-2 text-lg">
+                            {isDragging ? 'Drop your file here' : 'Drop files here or click to upload'}
+                          </p>
+                          <p className="text-muted-foreground">Supports PDF, DOCX, TXT, JPG, PNG</p>
+                        </label>
                       </div>
                     </TabsContent>
 
